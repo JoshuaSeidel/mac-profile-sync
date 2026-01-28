@@ -81,18 +81,21 @@ type FileInfo struct {
 // FileListMessage contains a list of files
 type FileListMessage struct {
 	FolderPath string     `json:"folder_path"`
+	FolderName string     `json:"folder_name"` // Base folder name (e.g., "Desktop", "Documents")
 	Files      []FileInfo `json:"files"`
 }
 
 // FileRequestMessage requests a specific file
 type FileRequestMessage struct {
 	FolderPath string `json:"folder_path"`
+	FolderName string `json:"folder_name"`
 	RelPath    string `json:"rel_path"`
 }
 
 // FileDataMessage contains file content
 type FileDataMessage struct {
 	FolderPath string    `json:"folder_path"`
+	FolderName string    `json:"folder_name"` // Base folder name for mapping on receiver
 	RelPath    string    `json:"rel_path"`
 	Size       int64     `json:"size"`
 	ModTime    time.Time `json:"mod_time"`
@@ -107,6 +110,7 @@ type FileDataMessage struct {
 // FileDeleteMessage notifies about a deleted file
 type FileDeleteMessage struct {
 	FolderPath string `json:"folder_path"`
+	FolderName string `json:"folder_name"`
 	RelPath    string `json:"rel_path"`
 }
 

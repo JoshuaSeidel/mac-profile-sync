@@ -25,6 +25,21 @@ type SyncActivity struct {
 	Timestamp  time.Time `json:"timestamp"`
 }
 
+// getFolderName extracts the base folder name from a path (e.g., "Desktop" from "/Users/josh/Desktop")
+func getFolderName(folderPath string) string {
+	return filepath.Base(folderPath)
+}
+
+// findLocalFolderByName finds the local folder path that matches the given folder name
+func (e *Engine) findLocalFolderByName(folderName string) string {
+	for _, folder := range e.cfg.Folders {
+		if folder.Enabled && filepath.Base(folder.Path) == folderName {
+			return folder.Path
+		}
+	}
+	return ""
+}
+
 // Engine orchestrates the sync process
 type Engine struct {
 	cfg      *config.Config
@@ -155,6 +170,7 @@ func (e *Engine) SyncFolder(folderPath string) error {
 	// Send file list to all connected peers
 	msg := network.FileListMessage{
 		FolderPath: folderPath,
+		FolderName: getFolderName(folderPath),
 		Files:      netFiles,
 	}
 
@@ -272,6 +288,7 @@ func (e *Engine) handleFileChange(event FileEvent) {
 
 	msg := network.FileDataMessage{
 		FolderPath: event.FolderPath,
+		FolderName: getFolderName(event.FolderPath),
 		RelPath:    fi.RelPath,
 		Size:       fi.Size,
 		ModTime:    fi.ModTime,
@@ -315,6 +332,7 @@ func (e *Engine) handleFileDelete(event FileEvent) {
 	// Notify peers
 	msg := network.FileDeleteMessage{
 		FolderPath: event.FolderPath,
+		FolderName: getFolderName(event.FolderPath),
 		RelPath:    event.RelPath,
 	}
 
@@ -455,8 +473,18 @@ func (e *Engine) handleMessage(msg *network.Message, peerName string, send func(
 }
 
 func (e *Engine) handleFileList(fileList network.FileListMessage, peerName string, send func(*network.Message) error) {
+	// Map remote folder to local folder by name
+	localFolderPath := e.findLocalFolderByName(fileList.FolderName)
+	if localFolderPath == "" {
+		log.Debug().
+			Str("folderName", fileList.FolderName).
+			Msg("No matching local folder for received file list")
+		return
+	}
+
 	log.Debug().
-		Str("folder", fileList.FolderPath).
+		Str("remoteFolder", fileList.FolderPath).
+		Str("localFolder", localFolderPath).
 		Int("files", len(fileList.Files)).
 		Msg("Received file list")
 
@@ -468,7 +496,7 @@ func (e *Engine) handleFileList(fileList network.FileListMessage, peerName strin
 
 	// Check each file against our state
 	for _, remoteFile := range fileList.Files {
-		localPath := filepath.Join(fileList.FolderPath, remoteFile.RelPath)
+		localPath := filepath.Join(localFolderPath, remoteFile.RelPath)
 
 		// Check if local file exists
 		localInfo, err := os.Stat(localPath)
@@ -476,6 +504,7 @@ func (e *Engine) handleFileList(fileList network.FileListMessage, peerName strin
 			// File doesn't exist locally, request it
 			req := network.FileRequestMessage{
 				FolderPath: fileList.FolderPath,
+				FolderName: fileList.FolderName,
 				RelPath:    remoteFile.RelPath,
 			}
 			reqMsg, _ := network.NewMessage(network.MsgFileRequest, req)
@@ -488,7 +517,7 @@ func (e *Engine) handleFileList(fileList network.FileListMessage, peerName strin
 
 		if localHash != remoteFile.Hash {
 			// Check for conflict
-			conflict := e.conflict.DetectConflict(fileList.FolderPath, remoteFile.RelPath, &ConflictFile{
+			conflict := e.conflict.DetectConflict(localFolderPath, remoteFile.RelPath, &ConflictFile{
 				Size:       remoteFile.Size,
 				ModTime:    remoteFile.ModTime,
 				Hash:       remoteFile.Hash,
@@ -507,6 +536,7 @@ func (e *Engine) handleFileList(fileList network.FileListMessage, peerName strin
 					// Request the remote file
 					req := network.FileRequestMessage{
 						FolderPath: fileList.FolderPath,
+						FolderName: fileList.FolderName,
 						RelPath:    remoteFile.RelPath,
 					}
 					reqMsg, _ := network.NewMessage(network.MsgFileRequest, req)
@@ -518,6 +548,7 @@ func (e *Engine) handleFileList(fileList network.FileListMessage, peerName strin
 					// Remote is newer, request it
 					req := network.FileRequestMessage{
 						FolderPath: fileList.FolderPath,
+						FolderName: fileList.FolderName,
 						RelPath:    remoteFile.RelPath,
 					}
 					reqMsg, _ := network.NewMessage(network.MsgFileRequest, req)
@@ -563,6 +594,7 @@ func (e *Engine) handleFileRequest(req network.FileRequestMessage, send func(*ne
 
 	msg := network.FileDataMessage{
 		FolderPath: req.FolderPath,
+		FolderName: getFolderName(req.FolderPath),
 		RelPath:    req.RelPath,
 		Size:       fi.Size,
 		ModTime:    fi.ModTime,
@@ -582,7 +614,16 @@ func (e *Engine) handleFileData(fileData network.FileDataMessage, peerName strin
 		return
 	}
 
-	fullPath := filepath.Join(fileData.FolderPath, fileData.RelPath)
+	// Map remote folder to local folder by name
+	localFolderPath := e.findLocalFolderByName(fileData.FolderName)
+	if localFolderPath == "" {
+		log.Debug().
+			Str("folderName", fileData.FolderName).
+			Msg("No matching local folder for received file")
+		return
+	}
+
+	fullPath := filepath.Join(localFolderPath, fileData.RelPath)
 
 	// Ensure directory exists
 	dir := filepath.Dir(fullPath)
@@ -591,7 +632,7 @@ func (e *Engine) handleFileData(fileData network.FileDataMessage, peerName strin
 		return
 	}
 
-	// Write file
+	// Write file with permissions (file will be owned by current user automatically)
 	if err := os.WriteFile(fullPath, fileData.Data, os.FileMode(fileData.Permission)); err != nil {
 		log.Error().Err(err).Str("path", fullPath).Msg("Failed to write file")
 		return
@@ -602,8 +643,8 @@ func (e *Engine) handleFileData(fileData network.FileDataMessage, peerName strin
 		log.Warn().Err(err).Str("path", fullPath).Msg("Failed to set mod time")
 	}
 
-	// Update state
-	e.state.UpdateFileState(fileData.FolderPath, &FileState{
+	// Update state (use local folder path)
+	e.state.UpdateFileState(localFolderPath, &FileState{
 		RelPath:    fileData.RelPath,
 		Hash:       fileData.Hash,
 		Size:       fileData.Size,
@@ -617,7 +658,7 @@ func (e *Engine) handleFileData(fileData network.FileDataMessage, peerName strin
 	e.addActivity(&SyncActivity{
 		Type:       "received",
 		FileName:   filepath.Base(fileData.RelPath),
-		FolderPath: fileData.FolderPath,
+		FolderPath: localFolderPath,
 		RelPath:    fileData.RelPath,
 		PeerName:   peerName,
 		Timestamp:  time.Now(),
@@ -625,6 +666,7 @@ func (e *Engine) handleFileData(fileData network.FileDataMessage, peerName strin
 
 	log.Info().
 		Str("file", fileData.RelPath).
+		Str("folder", localFolderPath).
 		Str("from", peerName).
 		Msg("Received file")
 }
@@ -636,7 +678,16 @@ func (e *Engine) handleRemoteDelete(del network.FileDeleteMessage, peerName stri
 		return
 	}
 
-	fullPath := filepath.Join(del.FolderPath, del.RelPath)
+	// Map remote folder to local folder by name
+	localFolderPath := e.findLocalFolderByName(del.FolderName)
+	if localFolderPath == "" {
+		log.Debug().
+			Str("folderName", del.FolderName).
+			Msg("No matching local folder for delete request")
+		return
+	}
+
+	fullPath := filepath.Join(localFolderPath, del.RelPath)
 
 	// Delete local file
 	if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
@@ -645,13 +696,13 @@ func (e *Engine) handleRemoteDelete(del network.FileDeleteMessage, peerName stri
 	}
 
 	// Update state
-	e.state.RemoveFileState(del.FolderPath, del.RelPath)
+	e.state.RemoveFileState(localFolderPath, del.RelPath)
 
 	// Record activity
 	e.addActivity(&SyncActivity{
 		Type:       "deleted",
 		FileName:   filepath.Base(del.RelPath),
-		FolderPath: del.FolderPath,
+		FolderPath: localFolderPath,
 		RelPath:    del.RelPath,
 		PeerName:   peerName,
 		Timestamp:  time.Now(),
@@ -659,6 +710,7 @@ func (e *Engine) handleRemoteDelete(del network.FileDeleteMessage, peerName stri
 
 	log.Info().
 		Str("file", del.RelPath).
+		Str("folder", localFolderPath).
 		Str("from", peerName).
 		Msg("Deleted file (remote request)")
 }
