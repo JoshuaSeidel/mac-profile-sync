@@ -26,14 +26,29 @@ type SyncActivity struct {
 }
 
 // getFolderName extracts the base folder name from a path (e.g., "Desktop" from "/Users/josh/Desktop")
+// Special case: home directory returns "~" to allow matching between users with different usernames
 func getFolderName(folderPath string) string {
+	home, _ := os.UserHomeDir()
+	if folderPath == home {
+		return "~"
+	}
 	return filepath.Base(folderPath)
 }
 
 // findLocalFolderByName finds the local folder path that matches the given folder name
+// Special case: "~" matches the home directory
 func (e *Engine) findLocalFolderByName(folderName string) string {
+	home, _ := os.UserHomeDir()
 	for _, folder := range e.cfg.Folders {
-		if folder.Enabled && filepath.Base(folder.Path) == folderName {
+		if !folder.Enabled {
+			continue
+		}
+		// Check for home directory special case
+		if folderName == "~" && folder.Path == home {
+			return folder.Path
+		}
+		// Normal folder name matching
+		if filepath.Base(folder.Path) == folderName {
 			return folder.Path
 		}
 	}

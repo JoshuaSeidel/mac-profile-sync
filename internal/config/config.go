@@ -170,6 +170,32 @@ func setDefaults() {
 		"*.crdownload",
 		".DocumentRevisions-V100",
 		".TemporaryItems",
+		// macOS system folders
+		"Library",
+		".Trash",
+		".cache",
+		".local",
+		".config",
+		// Application caches and state
+		"Caches",
+		"CachedData",
+		"Cache",
+		".npm",
+		".yarn",
+		".cargo",
+		".rustup",
+		".go",
+		// IDE/Editor state
+		".vscode",
+		".idea",
+		"*.xcworkspace",
+		"*.xcuserdata",
+		// Build artifacts
+		"build",
+		"dist",
+		"target",
+		"__pycache__",
+		"*.pyc",
 	})
 	viper.SetDefault("sync.exclude_dirs", []string{})
 	viper.SetDefault("network.port", 9876)

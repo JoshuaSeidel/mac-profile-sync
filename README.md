@@ -134,6 +134,34 @@ mac-profile-sync version
 | `a` | Add manual peer |
 | `x` | Remove peer |
 
+## Syncing Between Different Usernames
+
+Mac Profile Sync supports syncing between Macs with **different usernames**. For example:
+- Mac 1: `/Users/john/Desktop`
+- Mac 2: `/Users/johnny/Desktop`
+
+The app uses folder names (like "Desktop", "Documents") to match folders between machines, not the full path. This allows seamless syncing even when usernames differ.
+
+### Home Directory Syncing
+
+You can sync your entire home directory by adding `~` or your home path:
+
+```bash
+# In TUI, press 'a' in Folders view and enter:
+~
+```
+
+When syncing home directories, the following are **ignored by default** to prevent issues:
+- `Library` - macOS system files
+- `.Trash` - Trash folder
+- `.cache`, `.local`, `.config` - Application caches
+- `Caches`, `CachedData`, `Cache` - Various cache folders
+- Node/Rust/Go/Python package managers (`.npm`, `.cargo`, `.rustup`, etc.)
+- IDE state (`.vscode`, `.idea`)
+- Build artifacts (`build`, `dist`, `target`, `node_modules`)
+
+Add additional exclusions in the TUI (press `e` in Folders view) or edit `~/.mac-profile-sync/config.yaml`.
+
 ## Configuration
 
 Configuration is stored at `~/.mac-profile-sync/config.yaml`:
