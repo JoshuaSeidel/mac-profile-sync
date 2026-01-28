@@ -13,16 +13,22 @@ import (
 	"github.com/jseidel/mac-profile-sync/pkg/fileutil"
 )
 
+// SyncToggleMsg is sent when sync is toggled
+type SyncToggleMsg struct {
+	Enabled bool
+}
+
 // DashboardModel represents the dashboard view
 type DashboardModel struct {
-	cfg        *config.Config
-	peers      []*discovery.Peer
-	activities []*sync.SyncActivity
-	conflicts  []*sync.Conflict
-	folders    []folderInfo
-	width      int
-	height     int
-	selected   int
+	cfg         *config.Config
+	peers       []*discovery.Peer
+	activities  []*sync.SyncActivity
+	conflicts   []*sync.Conflict
+	folders     []folderInfo
+	width       int
+	height      int
+	selected    int
+	syncRunning bool
 }
 
 type folderInfo struct {
@@ -44,8 +50,9 @@ func NewDashboardModel(cfg *config.Config) *DashboardModel {
 	}
 
 	return &DashboardModel{
-		cfg:     cfg,
-		folders: folders,
+		cfg:         cfg,
+		folders:     folders,
+		syncRunning: cfg.IsSyncEnabled(),
 	}
 }
 
@@ -71,6 +78,15 @@ func (m *DashboardModel) Update(msg tea.Msg) (*DashboardModel, tea.Cmd) {
 			if m.selected < len(m.folders)-1 {
 				m.selected++
 			}
+		case "s":
+			// Toggle sync
+			newState := !m.syncRunning
+			m.syncRunning = newState
+			m.cfg.Sync.Enabled = newState
+			config.Save(m.cfg)
+			return m, func() tea.Msg {
+				return SyncToggleMsg{Enabled: newState}
+			}
 		}
 	}
 
@@ -86,20 +102,29 @@ func (m *DashboardModel) View() string {
 	b.WriteString(title)
 	b.WriteString("\n\n")
 
-	// Connection status
-	connected := len(m.peers) > 0
-	b.WriteString("Status: ")
-	b.WriteString(StatusIndicator(connected))
+	// Sync status
+	b.WriteString("Sync: ")
+	if m.syncRunning {
+		b.WriteString(connectedStyle.Render("● Running"))
+	} else {
+		b.WriteString(errorStyle.Render("○ Stopped"))
+	}
+	b.WriteString("  ")
+	b.WriteString(subtitleStyle.Render("(press 's' to toggle)"))
 	b.WriteString("\n")
 
-	// Peer info
+	// Connection status
+	connected := len(m.peers) > 0
+	b.WriteString("Peer: ")
 	if connected {
 		peer := m.peers[0]
-		b.WriteString(fmt.Sprintf("Peer: %s (%s)\n", peer.Name, peer.Address()))
+		b.WriteString(StatusIndicator(true))
+		b.WriteString(fmt.Sprintf(" %s (%s)", peer.Name, peer.Address()))
 	} else {
-		b.WriteString(subtitleStyle.Render("Waiting for peers..."))
-		b.WriteString("\n")
+		b.WriteString(StatusIndicator(false))
+		b.WriteString(subtitleStyle.Render(" Waiting for peers..."))
 	}
+	b.WriteString("\n")
 
 	b.WriteString("\n")
 
@@ -240,10 +265,16 @@ func (m *DashboardModel) renderConflictBox() string {
 }
 
 func (m *DashboardModel) renderHelpBar() string {
+	var syncHint string
+	if m.syncRunning {
+		syncHint = HelpItem("s", "top sync")
+	} else {
+		syncHint = HelpItem("s", "tart sync")
+	}
+
 	items := []string{
-		HelpItem("d", "ashboard"),
-		HelpItem("f", "olders"),
-		HelpItem("s", "ettings"),
+		syncHint,
+		HelpItem("↑↓", "navigate"),
 		HelpItem("q", "uit"),
 	}
 	return strings.Join(items, " ")
@@ -275,6 +306,16 @@ func (m *DashboardModel) RefreshFolders() {
 			fileCount: count,
 		}
 	}
+}
+
+// SetSyncRunning updates the sync running state
+func (m *DashboardModel) SetSyncRunning(running bool) {
+	m.syncRunning = running
+}
+
+// IsSyncRunning returns whether sync is running
+func (m *DashboardModel) IsSyncRunning() bool {
+	return m.syncRunning
 }
 
 func shortenPath(path string, maxLen int) string {

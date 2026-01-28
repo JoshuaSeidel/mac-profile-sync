@@ -27,14 +27,17 @@ func main() {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
-	// Root command
+	// Root command - runs daemon by default
 	rootCmd := &cobra.Command{
 		Use:   "mac-profile-sync",
 		Short: "Sync folders between Macs in real-time",
 		Long: `Mac Profile Sync keeps folders (Desktop, Documents, etc.) synchronized
 between two Macs in real-time using filesystem watching, with Bonjour
-auto-discovery and configurable conflict resolution.`,
-		RunE: runApp,
+auto-discovery and configurable conflict resolution.
+
+By default, runs as a background daemon. Use 'tui' subcommand for
+interactive configuration and control.`,
+		RunE: runDaemon,
 	}
 
 	// Version command
@@ -78,15 +81,15 @@ auto-discovery and configurable conflict resolution.`,
 		RunE:  runPeers,
 	}
 
-	// Daemon command
-	daemonCmd := &cobra.Command{
-		Use:   "daemon",
-		Short: "Run as background daemon (no TUI)",
-		RunE:  runDaemon,
+	// TUI command for interactive configuration and control
+	tuiCmd := &cobra.Command{
+		Use:   "tui",
+		Short: "Launch interactive TUI for configuration and control",
+		RunE:  runTUI,
 	}
 
 	// Add commands
-	rootCmd.AddCommand(versionCmd, statusCmd, addCmd, removeCmd, peersCmd, daemonCmd)
+	rootCmd.AddCommand(versionCmd, statusCmd, addCmd, removeCmd, peersCmd, tuiCmd)
 
 	// Flags
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose logging")
@@ -97,7 +100,7 @@ auto-discovery and configurable conflict resolution.`,
 	}
 }
 
-func runApp(cmd *cobra.Command, args []string) error {
+func runTUI(cmd *cobra.Command, args []string) error {
 	verbose, _ := cmd.Flags().GetBool("verbose")
 	if verbose {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
@@ -111,10 +114,10 @@ func runApp(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	log.Info().Str("device", cfg.Device.Name).Msg("Starting Mac Profile Sync")
+	log.Info().Str("device", cfg.Device.Name).Msg("Starting Mac Profile Sync TUI")
 
 	// Create network components
-	server := network.NewServer(cfg.Network.Port, nil) // TLS can be added later
+	server := network.NewServer(cfg.Network.Port, nil)
 	client := network.NewClient(nil)
 
 	// Create discovery service
@@ -125,7 +128,7 @@ func runApp(cmd *cobra.Command, args []string) error {
 		cfg.Network.ManualPeers,
 	)
 
-	// Create sync engine
+	// Create sync engine (but don't start it yet - TUI controls that)
 	engine, err := sync.NewEngine(cfg, server, client)
 	if err != nil {
 		return fmt.Errorf("failed to create sync engine: %w", err)
@@ -135,7 +138,6 @@ func runApp(cmd *cobra.Command, args []string) error {
 	disc.SetCallbacks(
 		func(peer *discovery.Peer) {
 			log.Info().Str("peer", peer.Name).Msg("Peer found")
-			// Connect to discovered peer
 			go func() {
 				if _, err := client.Connect(peer.Address()); err != nil {
 					log.Error().Err(err).Str("peer", peer.Name).Msg("Failed to connect to peer")
@@ -147,7 +149,7 @@ func runApp(cmd *cobra.Command, args []string) error {
 		},
 	)
 
-	// Start services
+	// Start network services (for discovery/connection)
 	if err := server.Start(); err != nil {
 		return fmt.Errorf("failed to start server: %w", err)
 	}
@@ -158,12 +160,15 @@ func runApp(cmd *cobra.Command, args []string) error {
 	}
 	defer disc.Stop()
 
-	if err := engine.Start(); err != nil {
-		return fmt.Errorf("failed to start sync engine: %w", err)
+	// Only start sync engine if enabled in config
+	if cfg.IsSyncEnabled() {
+		if err := engine.Start(); err != nil {
+			return fmt.Errorf("failed to start sync engine: %w", err)
+		}
+		defer engine.Stop()
 	}
-	defer engine.Stop()
 
-	// Run TUI
+	// Run TUI - it can start/stop the engine
 	return tui.Run(cfg, disc, engine)
 }
 
@@ -179,6 +184,13 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Check if sync is enabled
+	if !cfg.IsSyncEnabled() {
+		log.Warn().Msg("Sync is disabled. Use 'mac-profile-sync tui' to configure and enable sync.")
+		fmt.Println("Sync is disabled. Run 'mac-profile-sync tui' to configure and enable sync.")
+		return nil
 	}
 
 	log.Info().Str("device", cfg.Device.Name).Msg("Starting Mac Profile Sync daemon")

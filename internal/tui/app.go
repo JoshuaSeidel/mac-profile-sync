@@ -150,6 +150,18 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case conflictUpdateMsg:
 		a.dashboard.SetConflicts(msg.conflicts)
+
+	case SyncToggleMsg:
+		// Start or stop sync engine
+		if msg.Enabled {
+			if a.engine != nil {
+				a.engine.Start()
+			}
+		} else {
+			if a.engine != nil {
+				a.engine.Stop()
+			}
+		}
 	}
 
 	return a, tea.Batch(cmds...)

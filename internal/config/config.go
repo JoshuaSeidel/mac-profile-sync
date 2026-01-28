@@ -31,6 +31,7 @@ type FolderConfig struct {
 
 // SyncConfig defines sync behavior
 type SyncConfig struct {
+	Enabled            bool     `mapstructure:"enabled"`
 	Direction          string   `mapstructure:"direction"`
 	ConflictResolution string   `mapstructure:"conflict_resolution"`
 	IgnorePatterns     []string `mapstructure:"ignore_patterns"`
@@ -150,6 +151,7 @@ func setDefaults() {
 		{Path: "~/Desktop", Enabled: true},
 		{Path: "~/Documents", Enabled: true},
 	})
+	viper.SetDefault("sync.enabled", false)
 	viper.SetDefault("sync.direction", "bidirectional")
 	viper.SetDefault("sync.conflict_resolution", "newest_wins")
 	viper.SetDefault("sync.ignore_patterns", []string{
@@ -302,6 +304,17 @@ func (c *Config) ToggleFolder(path string) error {
 	}
 
 	return fmt.Errorf("folder not found: %s", path)
+}
+
+// IsSyncEnabled returns whether sync is enabled
+func (c *Config) IsSyncEnabled() bool {
+	return c.Sync.Enabled
+}
+
+// SetSyncEnabled enables or disables sync
+func (c *Config) SetSyncEnabled(enabled bool) error {
+	c.Sync.Enabled = enabled
+	return Save(c)
 }
 
 // ShouldIgnore checks if a path matches any ignore pattern or excluded directory
