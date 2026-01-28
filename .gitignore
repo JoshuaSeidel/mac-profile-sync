@@ -1,0 +1,40 @@
+# Binaries
+/mac-profile-sync
+build/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local config
+config.yaml
+
+# Certificates
+certs/
+*.pem
+*.key
+*.crt
+
+# Logs
+*.log

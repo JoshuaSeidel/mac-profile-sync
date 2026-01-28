@@ -1,0 +1,38 @@
+# Mac Profile Sync Configuration
+# Copy this to ~/.mac-profile-sync/config.yaml
+
+# Device identification
+device:
+  name: "My-Mac"  # Friendly name shown to peers
+
+# Folders to sync
+folders:
+  - path: ~/Desktop
+    enabled: true
+  - path: ~/Documents
+    enabled: true
+  - path: ~/Pictures
+    enabled: false
+
+# Sync settings
+sync:
+  conflict_resolution: "newest_wins"  # newest_wins | keep_both | prompt
+  ignore_patterns:
+    - ".DS_Store"
+    - "*.tmp"
+    - ".git"
+    - "node_modules"
+    - ".Trash"
+    - "*.swp"
+    - "*~"
+
+# Network settings
+network:
+  port: 9876
+  use_discovery: true        # Enable Bonjour/mDNS
+  manual_peers: []           # Manual peer addresses (e.g., ["192.168.1.100:9876"])
+
+# Security
+security:
+  require_pairing: true      # Require pairing confirmation
+  encryption: true           # TLS encryption
