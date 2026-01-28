@@ -11,7 +11,6 @@
 
 set -e
 
-VERSION="v1.0.1"
 REPO="JoshuaSeidel/mac-profile-sync"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 BINARY_NAME="mac-profile-sync"
@@ -70,20 +69,23 @@ detect_platform() {
     info "Detected platform: $PLATFORM"
 }
 
-# Get the latest version from GitHub
-get_latest_version() {
-    if [ "$VERSION" = "latest" ]; then
+# Get the version to install (always fetches latest unless specified)
+get_version() {
+    if [ -n "$1" ]; then
+        VERSION="$1"
+        info "Installing specified version: $VERSION"
+    else
         info "Fetching latest version..."
-        VERSION="v1.0.1"
+        VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
         if [ -z "$VERSION" ]; then
             error "Could not determine latest version. Please specify a version manually."
         fi
+        info "Latest version: $VERSION"
     fi
-    info "Installing version: $VERSION"
 }
 
 # Download and install
-install() {
+install_binary() {
     DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${BINARY_NAME}-${VERSION}-${PLATFORM}.tar.gz"
 
     info "Downloading from: $DOWNLOAD_URL"
@@ -102,7 +104,7 @@ install() {
     tar -xzf "$TMP_DIR/archive.tar.gz" -C "$TMP_DIR"
 
     # Find the binary
-    BINARY_PATH=$(find "$TMP_DIR" -name "${BINARY_NAME}*" -type f -perm +111 | head -1)
+    BINARY_PATH=$(find "$TMP_DIR" -name "${BINARY_NAME}*" -type f -perm +111 2>/dev/null | head -1)
     if [ -z "$BINARY_PATH" ]; then
         BINARY_PATH="$TMP_DIR/${BINARY_NAME}-${PLATFORM}"
     fi
@@ -138,12 +140,13 @@ setup_config() {
 
     if [ ! -f "$CONFIG_DIR/config.yaml" ]; then
         info "Creating default configuration..."
-        cat > "$CONFIG_DIR/config.yaml" << 'EOF'
+        HOSTNAME_VAL=$(hostname -s 2>/dev/null || echo "My-Mac")
+        cat > "$CONFIG_DIR/config.yaml" << EOF
 # Mac Profile Sync Configuration
 
 # Device identification
 device:
-  name: "${HOSTNAME:-My-Mac}"
+  name: "$HOSTNAME_VAL"
 
 # Folders to sync
 folders:
@@ -173,9 +176,6 @@ security:
   require_pairing: true
   encryption: true
 EOF
-        # Replace hostname in config
-        HOSTNAME_VAL=$(hostname -s 2>/dev/null || echo "My-Mac")
-        sed -i '' "s/\${HOSTNAME:-My-Mac}/$HOSTNAME_VAL/" "$CONFIG_DIR/config.yaml" 2>/dev/null || true
 
         success "Created default configuration at $CONFIG_DIR/config.yaml"
     else
@@ -242,7 +242,6 @@ print_next_steps() {
     echo "   - Device name (how this Mac appears to peers)"
     echo "   - Folders to sync (Desktop, Documents, etc.)"
     echo "   - Conflict resolution strategy"
-    echo "   - Network port and discovery settings"
     echo ""
     echo -e "${YELLOW}2. Start syncing:${NC}"
     echo "   Option A - Interactive TUI:"
@@ -255,6 +254,10 @@ print_next_steps() {
     echo "   Run the same installer and start the app."
     echo "   Both Macs will auto-discover each other via Bonjour."
     echo ""
+    echo -e "${YELLOW}4. To add a peer manually:${NC}"
+    echo "   In the TUI, press 3 (Peers), then 'a' to add."
+    echo "   Enter the other Mac's IP:port (e.g., 192.168.1.100:9876)"
+    echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     echo -e "${GREEN}Quick Reference:${NC}"
@@ -262,8 +265,13 @@ print_next_steps() {
     echo "  mac-profile-sync daemon       Run as background service"
     echo "  mac-profile-sync status       Show current sync status"
     echo "  mac-profile-sync add ~/path   Add a folder to sync"
-    echo "  mac-profile-sync remove ~/path Remove a folder"
     echo "  mac-profile-sync peers        List discovered peers"
+    echo ""
+    echo -e "${GREEN}TUI Navigation:${NC}"
+    echo "  Tab / Shift+Tab   Switch between views"
+    echo "  1-4               Jump to view (Dashboard/Folders/Peers/Settings)"
+    echo "  ↑↓                Navigate within view"
+    echo "  q                 Quit"
     echo ""
     echo -e "${GREEN}Configuration:${NC} ~/.mac-profile-sync/config.yaml"
     echo -e "${GREEN}Logs:${NC}          ~/.mac-profile-sync/stderr.log"
@@ -281,11 +289,11 @@ main() {
     echo ""
 
     detect_platform
-    get_latest_version
-    install
+    get_version "$1"
+    install_binary
     setup_config
     setup_launchd
     print_next_steps
 }
 
-main
+main "$1"

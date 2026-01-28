@@ -86,28 +86,3 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  update-installer:
-    name: Update Installer Script
-    needs: release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: main
-
-      - name: Get version
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
-      - name: Update install script version
-        run: |
-          sed -i "s/VERSION=.*/VERSION=\"${{ steps.version.outputs.VERSION }}\"/" install.sh
-
-      - name: Commit and push
-        run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          git add install.sh
-          git diff --staged --quiet || git commit -m "Update installer to ${{ steps.version.outputs.VERSION }}"
-          git push
