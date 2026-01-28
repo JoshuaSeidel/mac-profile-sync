@@ -17,9 +17,11 @@ type View int
 const (
 	ViewDashboard View = iota
 	ViewFolders
-	ViewConflicts
+	ViewPeers
 	ViewSettings
 )
+
+const numViews = 4
 
 // App is the main TUI application model
 type App struct {
@@ -30,7 +32,7 @@ type App struct {
 	// Views
 	dashboard *DashboardModel
 	folders   *FoldersModel
-	conflicts *ConflictsModel
+	peers     *PeersModel
 	settings  *SettingsModel
 
 	// State
@@ -57,7 +59,7 @@ func NewApp(cfg *config.Config, disc *discovery.Discovery, engine *sync.Engine) 
 		engine:          engine,
 		dashboard:       NewDashboardModel(cfg),
 		folders:         NewFoldersModel(cfg),
-		conflicts:       NewConflictsModel(),
+		peers:           NewPeersModel(cfg, disc),
 		settings:        NewSettingsModel(cfg),
 		currentView:     ViewDashboard,
 		spinner:         s,
@@ -65,11 +67,6 @@ func NewApp(cfg *config.Config, disc *discovery.Discovery, engine *sync.Engine) 
 		activityUpdates: make(chan []*sync.SyncActivity, 10),
 		conflictUpdates: make(chan []*sync.Conflict, 10),
 	}
-
-	// Set up conflict resolution callback
-	app.conflicts.SetResolveCallback(func(id string, res sync.ConflictResolution) error {
-		return engine.ResolveConflict(id, res)
-	})
 
 	return app
 }
@@ -97,8 +94,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.dashboard.height = msg.Height
 		a.folders.width = msg.Width
 		a.folders.height = msg.Height
-		a.conflicts.width = msg.Width
-		a.conflicts.height = msg.Height
+		a.peers.width = msg.Width
+		a.peers.height = msg.Height
 		a.settings.width = msg.Width
 		a.settings.height = msg.Height
 
@@ -108,18 +105,28 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.quitting = true
 			return a, tea.Quit
 
-		case "d":
+		case "tab", "shift+tab":
+			// Tab switches between views
+			if msg.String() == "tab" {
+				a.currentView = View((int(a.currentView) + 1) % numViews)
+			} else {
+				a.currentView = View((int(a.currentView) - 1 + numViews) % numViews)
+			}
+			a.refreshCurrentView()
+
+		case "1":
 			a.currentView = ViewDashboard
-			a.dashboard.RefreshFolders()
-		case "f":
+			a.refreshCurrentView()
+		case "2":
 			a.currentView = ViewFolders
-			a.folders.Refresh()
-		case "c":
-			a.currentView = ViewConflicts
-			a.conflicts.SetConflicts(a.engine.GetConflicts())
-		case "s":
+			a.refreshCurrentView()
+		case "3":
+			a.currentView = ViewPeers
+			a.refreshCurrentView()
+		case "4":
 			a.currentView = ViewSettings
-			a.settings.Refresh()
+			a.refreshCurrentView()
+
 		default:
 			// Forward to current view
 			cmds = append(cmds, a.updateCurrentView(msg))
@@ -143,7 +150,6 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case conflictUpdateMsg:
 		a.dashboard.SetConflicts(msg.conflicts)
-		a.conflicts.SetConflicts(msg.conflicts)
 	}
 
 	return a, tea.Batch(cmds...)
@@ -165,8 +171,8 @@ func (a *App) View() string {
 		content = a.dashboard.View()
 	case ViewFolders:
 		content = a.folders.View()
-	case ViewConflicts:
-		content = a.conflicts.View()
+	case ViewPeers:
+		content = a.peers.View()
 	case ViewSettings:
 		content = a.settings.View()
 	}
@@ -177,34 +183,49 @@ func (a *App) View() string {
 func (a *App) renderTabs() string {
 	tabs := []struct {
 		label string
+		key   string
 		view  View
 	}{
-		{"Dashboard", ViewDashboard},
-		{"Folders", ViewFolders},
-		{"Conflicts", ViewConflicts},
-		{"Settings", ViewSettings},
+		{"Dashboard", "1", ViewDashboard},
+		{"Folders", "2", ViewFolders},
+		{"Peers", "3", ViewPeers},
+		{"Settings", "4", ViewSettings},
 	}
 
 	var rendered []string
 	for _, t := range tabs {
-		rendered = append(rendered, Tab(t.label, a.currentView == t.view))
+		rendered = append(rendered, TabWithKey(t.label, t.key, a.currentView == t.view))
 	}
 
-	return lipglossJoinHorizontal(rendered...)
+	return lipglossJoinHorizontal(rendered...) + "  " + mutedStyle.Render("Tab: switch  q: quit")
+}
+
+func (a *App) refreshCurrentView() {
+	switch a.currentView {
+	case ViewDashboard:
+		a.dashboard.RefreshFolders()
+	case ViewFolders:
+		a.folders.Refresh()
+	case ViewPeers:
+		a.peers.Refresh()
+	case ViewSettings:
+		a.settings.Refresh()
+	}
 }
 
 func (a *App) updateCurrentView(msg tea.Msg) tea.Cmd {
+	var cmd tea.Cmd
 	switch a.currentView {
 	case ViewDashboard:
-		a.dashboard, _ = a.dashboard.Update(msg)
+		a.dashboard, cmd = a.dashboard.Update(msg)
 	case ViewFolders:
-		a.folders, _ = a.folders.Update(msg)
-	case ViewConflicts:
-		a.conflicts, _ = a.conflicts.Update(msg)
+		a.folders, cmd = a.folders.Update(msg)
+	case ViewPeers:
+		a.peers, cmd = a.peers.Update(msg)
 	case ViewSettings:
-		a.settings, _ = a.settings.Update(msg)
+		a.settings, cmd = a.settings.Update(msg)
 	}
-	return nil
+	return cmd
 }
 
 func (a *App) refreshData() {
@@ -212,16 +233,13 @@ func (a *App) refreshData() {
 	if a.discovery != nil {
 		peers := a.discovery.GetPeers()
 		a.dashboard.SetPeers(peers)
+		a.peers.SetDiscoveredPeers(peers)
 	}
 
 	// Update activities
 	if a.engine != nil {
 		activities := a.engine.GetActivities(10)
 		a.dashboard.SetActivities(activities)
-
-		conflicts := a.engine.GetConflicts()
-		a.dashboard.SetConflicts(conflicts)
-		a.conflicts.SetConflicts(conflicts)
 	}
 }
 

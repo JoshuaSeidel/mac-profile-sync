@@ -177,3 +177,12 @@ func Tab(label string, active bool) string {
 	}
 	return inactiveTabStyle.Render(label)
 }
+
+// TabWithKey renders a tab item with a keyboard shortcut indicator
+func TabWithKey(label, key string, active bool) string {
+	keyIndicator := helpKeyStyle.Render(key)
+	if active {
+		return keyIndicator + " " + activeTabStyle.Render(label)
+	}
+	return keyIndicator + " " + inactiveTabStyle.Render(label)
+}
