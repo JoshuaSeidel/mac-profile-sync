@@ -101,7 +101,9 @@ interactive configuration and control.`,
 }
 
 func runTUI(cmd *cobra.Command, args []string) error {
-	// TUI is config-only - no server/sync started here
+	// Suppress all logging in TUI mode - TUI handles its own output
+	zerolog.SetGlobalLevel(zerolog.Disabled)
+
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
