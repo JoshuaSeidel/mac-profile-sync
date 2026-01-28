@@ -34,6 +34,7 @@ type SyncConfig struct {
 	Direction          string   `mapstructure:"direction"`
 	ConflictResolution string   `mapstructure:"conflict_resolution"`
 	IgnorePatterns     []string `mapstructure:"ignore_patterns"`
+	ExcludeDirs        []string `mapstructure:"exclude_dirs"`
 }
 
 // SyncDirection represents the sync direction mode
@@ -159,7 +160,16 @@ func setDefaults() {
 		".Trash",
 		"*.swp",
 		"*~",
+		"$RECYCLE.BIN",
+		".prl_rec",
+		".Spotlight-V100",
+		".fseventsd",
+		"*.part",
+		"*.crdownload",
+		".DocumentRevisions-V100",
+		".TemporaryItems",
 	})
+	viper.SetDefault("sync.exclude_dirs", []string{})
 	viper.SetDefault("network.port", 9876)
 	viper.SetDefault("network.use_discovery", true)
 	viper.SetDefault("network.manual_peers", []string{})
@@ -294,14 +304,29 @@ func (c *Config) ToggleFolder(path string) error {
 	return fmt.Errorf("folder not found: %s", path)
 }
 
-// ShouldIgnore checks if a path matches any ignore pattern
+// ShouldIgnore checks if a path matches any ignore pattern or excluded directory
 func (c *Config) ShouldIgnore(path string) bool {
 	base := filepath.Base(path)
+
+	// Check ignore patterns (matches file/dir name)
 	for _, pattern := range c.Sync.IgnorePatterns {
 		matched, _ := filepath.Match(pattern, base)
 		if matched {
 			return true
 		}
 	}
+
+	// Check if path is under any excluded directory
+	for _, excludeDir := range c.Sync.ExcludeDirs {
+		// Expand ~ in exclude dir
+		home, _ := os.UserHomeDir()
+		expandedExclude := expandPath(excludeDir, home)
+
+		// Check if path starts with excluded dir
+		if strings.HasPrefix(path, expandedExclude) {
+			return true
+		}
+	}
+
 	return false
 }

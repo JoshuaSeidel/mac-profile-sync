@@ -529,6 +529,23 @@ func (e *Engine) handleFileList(fileList network.FileListMessage, peerName strin
 func (e *Engine) handleFileRequest(req network.FileRequestMessage, send func(*network.Message) error) {
 	fullPath := filepath.Join(req.FolderPath, req.RelPath)
 
+	// Check if it's a directory (skip directories)
+	info, err := os.Stat(fullPath)
+	if err != nil {
+		log.Error().Err(err).Str("path", fullPath).Msg("Failed to stat requested file")
+		return
+	}
+	if info.IsDir() {
+		log.Debug().Str("path", fullPath).Msg("Skipping directory in file request")
+		return
+	}
+
+	// Check if path should be ignored
+	if e.cfg.ShouldIgnore(fullPath) {
+		log.Debug().Str("path", fullPath).Msg("Skipping ignored file in request")
+		return
+	}
+
 	// Read file
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
