@@ -13,22 +13,23 @@ import (
 	"github.com/jseidel/mac-profile-sync/pkg/fileutil"
 )
 
-// SyncToggleMsg is sent when sync is toggled
+// SyncToggleMsg is sent when sync is toggled (for legacy app mode)
 type SyncToggleMsg struct {
 	Enabled bool
 }
 
 // DashboardModel represents the dashboard view
 type DashboardModel struct {
-	cfg         *config.Config
-	peers       []*discovery.Peer
-	activities  []*sync.SyncActivity
-	conflicts   []*sync.Conflict
-	folders     []folderInfo
-	width       int
-	height      int
-	selected    int
-	syncRunning bool
+	cfg           *config.Config
+	peers         []*discovery.Peer
+	activities    []*sync.SyncActivity
+	conflicts     []*sync.Conflict
+	folders       []folderInfo
+	width         int
+	height        int
+	selected      int
+	syncRunning   bool // Config setting
+	daemonRunning bool // Actual daemon process status
 }
 
 type folderInfo struct {
@@ -79,13 +80,17 @@ func (m *DashboardModel) Update(msg tea.Msg) (*DashboardModel, tea.Cmd) {
 				m.selected++
 			}
 		case "s":
-			// Toggle sync
-			newState := !m.syncRunning
-			m.syncRunning = newState
-			m.cfg.Sync.Enabled = newState
+			// Toggle daemon - start or stop the background process
+			if m.daemonRunning {
+				return m, func() tea.Msg {
+					return DaemonToggleMsg{Start: false}
+				}
+			}
+			// Enable sync in config before starting daemon
+			m.cfg.Sync.Enabled = true
 			_ = config.Save(m.cfg)
 			return m, func() tea.Msg {
-				return SyncToggleMsg{Enabled: newState}
+				return DaemonToggleMsg{Start: true}
 			}
 		}
 	}
@@ -102,27 +107,25 @@ func (m *DashboardModel) View() string {
 	b.WriteString(title)
 	b.WriteString("\n\n")
 
-	// Sync status
-	b.WriteString("Sync: ")
-	if m.syncRunning {
+	// Daemon status
+	b.WriteString("Daemon: ")
+	if m.daemonRunning {
 		b.WriteString(connectedStyle.Render("● Running"))
+		b.WriteString("  ")
+		b.WriteString(subtitleStyle.Render("(press 's' to stop)"))
 	} else {
 		b.WriteString(errorStyle.Render("○ Stopped"))
+		b.WriteString("  ")
+		b.WriteString(subtitleStyle.Render("(press 's' to start)"))
 	}
-	b.WriteString("  ")
-	b.WriteString(subtitleStyle.Render("(press 's' to toggle)"))
 	b.WriteString("\n")
 
-	// Connection status
-	connected := len(m.peers) > 0
-	b.WriteString("Peer: ")
-	if connected {
-		peer := m.peers[0]
-		b.WriteString(StatusIndicator(true))
-		b.WriteString(fmt.Sprintf(" %s (%s)", peer.Name, peer.Address()))
+	// Sync enabled status
+	b.WriteString("Sync:   ")
+	if m.cfg.Sync.Enabled {
+		b.WriteString(connectedStyle.Render("Enabled"))
 	} else {
-		b.WriteString(StatusIndicator(false))
-		b.WriteString(subtitleStyle.Render(" Waiting for peers..."))
+		b.WriteString(disabledItemStyle.Render("Disabled"))
 	}
 	b.WriteString("\n")
 
@@ -265,19 +268,24 @@ func (m *DashboardModel) renderConflictBox() string {
 }
 
 func (m *DashboardModel) renderHelpBar() string {
-	var syncHint string
-	if m.syncRunning {
-		syncHint = HelpItem("s", "top sync")
+	var daemonHint string
+	if m.daemonRunning {
+		daemonHint = HelpItem("s", "top daemon")
 	} else {
-		syncHint = HelpItem("s", "tart sync")
+		daemonHint = HelpItem("s", "tart daemon")
 	}
 
 	items := []string{
-		syncHint,
+		daemonHint,
 		HelpItem("↑↓", "navigate"),
 		HelpItem("q", "uit"),
 	}
 	return strings.Join(items, " ")
+}
+
+// SetDaemonRunning updates the daemon running state
+func (m *DashboardModel) SetDaemonRunning(running bool) {
+	m.daemonRunning = running
 }
 
 // SetPeers updates the peer list

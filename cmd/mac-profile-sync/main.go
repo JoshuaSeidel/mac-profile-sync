@@ -101,75 +101,15 @@ interactive configuration and control.`,
 }
 
 func runTUI(cmd *cobra.Command, args []string) error {
-	verbose, _ := cmd.Flags().GetBool("verbose")
-	if verbose {
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	} else {
-		zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	}
-
+	// TUI is config-only - no server/sync started here
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	log.Info().Str("device", cfg.Device.Name).Msg("Starting Mac Profile Sync TUI")
-
-	// Create network components
-	server := network.NewServer(cfg.Network.Port, nil)
-	client := network.NewClient(nil)
-
-	// Create discovery service
-	disc := discovery.NewDiscovery(
-		cfg.Device.Name,
-		cfg.Network.Port,
-		cfg.Network.UseDiscovery,
-		cfg.Network.ManualPeers,
-	)
-
-	// Create sync engine (but don't start it yet - TUI controls that)
-	engine, err := sync.NewEngine(cfg, server, client)
-	if err != nil {
-		return fmt.Errorf("failed to create sync engine: %w", err)
-	}
-
-	// Set up discovery callbacks
-	disc.SetCallbacks(
-		func(peer *discovery.Peer) {
-			log.Info().Str("peer", peer.Name).Msg("Peer found")
-			go func() {
-				if _, err := client.Connect(peer.Address()); err != nil {
-					log.Error().Err(err).Str("peer", peer.Name).Msg("Failed to connect to peer")
-				}
-			}()
-		},
-		func(peer *discovery.Peer) {
-			log.Info().Str("peer", peer.Name).Msg("Peer lost")
-		},
-	)
-
-	// Start network services (for discovery/connection)
-	if err := server.Start(); err != nil {
-		return fmt.Errorf("failed to start server: %w", err)
-	}
-	defer server.Stop()
-
-	if err := disc.Start(); err != nil {
-		return fmt.Errorf("failed to start discovery: %w", err)
-	}
-	defer disc.Stop()
-
-	// Only start sync engine if enabled in config
-	if cfg.IsSyncEnabled() {
-		if err := engine.Start(); err != nil {
-			return fmt.Errorf("failed to start sync engine: %w", err)
-		}
-		defer engine.Stop()
-	}
-
-	// Run TUI - it can start/stop the engine
-	return tui.Run(cfg, disc, engine)
+	// Run TUI for configuration and daemon control
+	return tui.RunConfigOnly(cfg)
 }
 
 func runDaemon(cmd *cobra.Command, args []string) error {

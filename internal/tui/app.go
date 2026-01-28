@@ -323,3 +323,187 @@ func Run(cfg *config.Config, disc *discovery.Discovery, engine *sync.Engine) err
 	_, err := p.Run()
 	return err
 }
+
+// ConfigApp is a simplified TUI for config-only mode (no sync engine)
+type ConfigApp struct {
+	cfg *config.Config
+
+	// Views
+	dashboard *DashboardModel
+	folders   *FoldersModel
+	peers     *PeersModel
+	settings  *SettingsModel
+
+	// State
+	currentView View
+	width       int
+	height      int
+	quitting    bool
+}
+
+// NewConfigApp creates a config-only TUI
+func NewConfigApp(cfg *config.Config) *ConfigApp {
+	return &ConfigApp{
+		cfg:         cfg,
+		dashboard:   NewDashboardModel(cfg),
+		folders:     NewFoldersModel(cfg),
+		peers:       NewPeersModel(cfg, nil),
+		settings:    NewSettingsModel(cfg),
+		currentView: ViewDashboard,
+	}
+}
+
+func (a *ConfigApp) Init() tea.Cmd {
+	return tea.Batch(
+		a.checkDaemonStatus(),
+		a.tickCmd(),
+	)
+}
+
+func (a *ConfigApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		a.width = msg.Width
+		a.height = msg.Height
+		a.dashboard.width = msg.Width
+		a.dashboard.height = msg.Height
+		a.folders.width = msg.Width
+		a.folders.height = msg.Height
+		a.peers.width = msg.Width
+		a.peers.height = msg.Height
+		a.settings.width = msg.Width
+		a.settings.height = msg.Height
+
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "q", "ctrl+c":
+			a.quitting = true
+			return a, tea.Quit
+
+		case "tab", "shift+tab":
+			if msg.String() == "tab" {
+				a.currentView = View((int(a.currentView) + 1) % numViews)
+			} else {
+				a.currentView = View((int(a.currentView) - 1 + numViews) % numViews)
+			}
+			a.refreshCurrentView()
+
+		case "1":
+			a.currentView = ViewDashboard
+			a.refreshCurrentView()
+		case "2":
+			a.currentView = ViewFolders
+			a.refreshCurrentView()
+		case "3":
+			a.currentView = ViewPeers
+			a.refreshCurrentView()
+		case "4":
+			a.currentView = ViewSettings
+			a.refreshCurrentView()
+
+		default:
+			cmds = append(cmds, a.updateCurrentView(msg))
+		}
+
+	case tickMsg:
+		cmds = append(cmds, a.checkDaemonStatus(), a.tickCmd())
+
+	case DaemonStatusMsg:
+		a.dashboard.SetDaemonRunning(msg.Running)
+
+	case DaemonToggleMsg:
+		if msg.Start {
+			cmds = append(cmds, a.startDaemon())
+		} else {
+			cmds = append(cmds, a.stopDaemon())
+		}
+	}
+
+	return a, tea.Batch(cmds...)
+}
+
+func (a *ConfigApp) View() string {
+	if a.quitting {
+		return "Goodbye!\n"
+	}
+
+	tabs := a.renderTabs()
+
+	var content string
+	switch a.currentView {
+	case ViewDashboard:
+		content = a.dashboard.View()
+	case ViewFolders:
+		content = a.folders.View()
+	case ViewPeers:
+		content = a.peers.View()
+	case ViewSettings:
+		content = a.settings.View()
+	}
+
+	return fmt.Sprintf("%s\n%s", tabs, content)
+}
+
+func (a *ConfigApp) renderTabs() string {
+	tabs := []struct {
+		label string
+		key   string
+		view  View
+	}{
+		{"Dashboard", "1", ViewDashboard},
+		{"Folders", "2", ViewFolders},
+		{"Peers", "3", ViewPeers},
+		{"Settings", "4", ViewSettings},
+	}
+
+	var rendered []string
+	for _, t := range tabs {
+		rendered = append(rendered, TabWithKey(t.label, t.key, a.currentView == t.view))
+	}
+
+	return lipglossJoinHorizontal(rendered...) + "  " + mutedStyle.Render("Tab: switch  q: quit")
+}
+
+func (a *ConfigApp) refreshCurrentView() {
+	switch a.currentView {
+	case ViewDashboard:
+		a.dashboard.RefreshFolders()
+	case ViewFolders:
+		a.folders.Refresh()
+	case ViewPeers:
+		a.peers.Refresh()
+	case ViewSettings:
+		a.settings.Refresh()
+	}
+}
+
+func (a *ConfigApp) updateCurrentView(msg tea.Msg) tea.Cmd {
+	var cmd tea.Cmd
+	switch a.currentView {
+	case ViewDashboard:
+		a.dashboard, cmd = a.dashboard.Update(msg)
+	case ViewFolders:
+		a.folders, cmd = a.folders.Update(msg)
+	case ViewPeers:
+		a.peers, cmd = a.peers.Update(msg)
+	case ViewSettings:
+		a.settings, cmd = a.settings.Update(msg)
+	}
+	return cmd
+}
+
+func (a *ConfigApp) tickCmd() tea.Cmd {
+	return tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
+}
+
+// RunConfigOnly starts the config-only TUI (no sync engine)
+func RunConfigOnly(cfg *config.Config) error {
+	app := NewConfigApp(cfg)
+	p := tea.NewProgram(app, tea.WithAltScreen())
+	_, err := p.Run()
+	return err
+}
