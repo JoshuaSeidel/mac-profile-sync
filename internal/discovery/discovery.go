@@ -43,16 +43,18 @@ func (p *Peer) Address() string {
 
 // Discovery manages peer discovery via mDNS and manual configuration
 type Discovery struct {
-	deviceName  string
-	port        int
+	deviceName   string
+	port         int
 	useDiscovery bool
-	manualPeers []string
+	manualPeers  []string
 
 	server   *zeroconf.Server
 	peers    map[string]*Peer
 	mu       sync.RWMutex
 	ctx      context.Context
 	cancel   context.CancelFunc
+	stopping bool
+	stopMu   sync.RWMutex
 
 	// Callbacks
 	onPeerFound func(*Peer)
@@ -104,10 +106,24 @@ func (d *Discovery) Start() error {
 
 // Stop stops the discovery service
 func (d *Discovery) Stop() {
+	d.stopMu.Lock()
+	d.stopping = true
+	d.stopMu.Unlock()
+
 	d.cancel()
+
+	// Give browse goroutines time to exit gracefully
+	time.Sleep(100 * time.Millisecond)
+
 	if d.server != nil {
 		d.server.Shutdown()
 	}
+}
+
+func (d *Discovery) isStopping() bool {
+	d.stopMu.RLock()
+	defer d.stopMu.RUnlock()
+	return d.stopping
 }
 
 // GetPeers returns all known peers
@@ -154,68 +170,93 @@ func (d *Discovery) registerService() error {
 func (d *Discovery) browse() {
 	// Browse continuously with a new resolver and channel each time
 	for {
+		if d.isStopping() {
+			return
+		}
+
 		select {
 		case <-d.ctx.Done():
 			return
 		default:
 		}
 
-		// Create a new resolver for each browse cycle
-		resolver, err := zeroconf.NewResolver(nil)
-		if err != nil {
-			log.Error().Err(err).Msg("Failed to create mDNS resolver")
-			time.Sleep(10 * time.Second)
-			continue
-		}
-
-		// Create a new channel for each browse (zeroconf closes the channel when done)
-		entries := make(chan *zeroconf.ServiceEntry)
-
-		// Create a context with timeout for this browse cycle
-		browseCtx, browseCancel := context.WithTimeout(d.ctx, 5*time.Second)
-
-		// Start Browse in background
-		go func() {
-			err := resolver.Browse(browseCtx, serviceType, serviceDomain, entries)
-			if err != nil && d.ctx.Err() == nil {
-				log.Debug().Err(err).Msg("mDNS browse cycle completed")
-			}
-		}()
-
-		// Process entries until channel is closed or context done
-		func() {
-			for {
-				select {
-				case entry, ok := <-entries:
-					if !ok {
-						// Channel closed by zeroconf
-						return
-					}
-					if entry == nil {
-						continue
-					}
-					// Don't add ourselves
-					if entry.Instance == d.deviceName {
-						continue
-					}
-					d.handleServiceEntry(entry)
-				case <-browseCtx.Done():
-					return
-				case <-d.ctx.Done():
-					browseCancel()
-					return
-				}
-			}
-		}()
-
-		browseCancel()
+		// Run a single browse cycle with panic recovery
+		d.doBrowseCycle()
 
 		// Check if we should stop
+		if d.isStopping() {
+			return
+		}
+
 		select {
 		case <-d.ctx.Done():
 			return
 		default:
 			time.Sleep(10 * time.Second)
+		}
+	}
+}
+
+func (d *Discovery) doBrowseCycle() {
+	// Recover from panics in zeroconf (known issue with channel closing)
+	defer func() {
+		if r := recover(); r != nil {
+			if !d.isStopping() {
+				log.Debug().Interface("panic", r).Msg("Recovered from mDNS browse panic")
+			}
+		}
+	}()
+
+	// Create a new resolver for each browse cycle
+	resolver, err := zeroconf.NewResolver(nil)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to create mDNS resolver")
+		return
+	}
+
+	// Create a new channel for each browse (zeroconf closes the channel when done)
+	entries := make(chan *zeroconf.ServiceEntry, 10)
+
+	// Create a context with timeout for this browse cycle
+	browseCtx, browseCancel := context.WithTimeout(d.ctx, 5*time.Second)
+	defer browseCancel()
+
+	// Start Browse in background with panic recovery
+	done := make(chan struct{})
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				if !d.isStopping() {
+					log.Debug().Interface("panic", r).Msg("Recovered from mDNS browse goroutine panic")
+				}
+			}
+			close(done)
+		}()
+		resolver.Browse(browseCtx, serviceType, serviceDomain, entries)
+	}()
+
+	// Process entries until context done or browse completes
+	for {
+		select {
+		case entry, ok := <-entries:
+			if !ok {
+				// Channel closed by zeroconf
+				return
+			}
+			if entry == nil {
+				continue
+			}
+			// Don't add ourselves
+			if entry.Instance == d.deviceName {
+				continue
+			}
+			d.handleServiceEntry(entry)
+		case <-browseCtx.Done():
+			return
+		case <-d.ctx.Done():
+			return
+		case <-done:
+			return
 		}
 	}
 }
