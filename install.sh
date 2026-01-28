@@ -11,7 +11,7 @@
 
 set -e
 
-VERSION="${1:-latest}"
+VERSION="v1.0.0"
 REPO="JoshuaSeidel/mac-profile-sync"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 BINARY_NAME="mac-profile-sync"
@@ -74,7 +74,7 @@ detect_platform() {
 get_latest_version() {
     if [ "$VERSION" = "latest" ]; then
         info "Fetching latest version..."
-        VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+        VERSION="v1.0.0"
         if [ -z "$VERSION" ]; then
             error "Could not determine latest version. Please specify a version manually."
         fi
