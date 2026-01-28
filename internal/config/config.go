@@ -31,9 +31,19 @@ type FolderConfig struct {
 
 // SyncConfig defines sync behavior
 type SyncConfig struct {
+	Direction          string   `mapstructure:"direction"`
 	ConflictResolution string   `mapstructure:"conflict_resolution"`
 	IgnorePatterns     []string `mapstructure:"ignore_patterns"`
 }
+
+// SyncDirection represents the sync direction mode
+type SyncDirection string
+
+const (
+	SyncBidirectional SyncDirection = "bidirectional" // Sync both ways (default)
+	SyncSendOnly      SyncDirection = "send_only"     // Only send files to peers
+	SyncReceiveOnly   SyncDirection = "receive_only"  // Only receive files from peers
+)
 
 // NetworkConfig defines network settings
 type NetworkConfig struct {
@@ -139,6 +149,7 @@ func setDefaults() {
 		{Path: "~/Desktop", Enabled: true},
 		{Path: "~/Documents", Enabled: true},
 	})
+	viper.SetDefault("sync.direction", "bidirectional")
 	viper.SetDefault("sync.conflict_resolution", "newest_wins")
 	viper.SetDefault("sync.ignore_patterns", []string{
 		".DS_Store",
@@ -196,6 +207,32 @@ func (c *Config) GetConflictStrategy() ConflictStrategy {
 	default:
 		return ConflictNewestWins
 	}
+}
+
+// GetSyncDirection returns the configured sync direction
+func (c *Config) GetSyncDirection() SyncDirection {
+	switch c.Sync.Direction {
+	case "send_only":
+		return SyncSendOnly
+	case "receive_only":
+		return SyncReceiveOnly
+	case "bidirectional":
+		return SyncBidirectional
+	default:
+		return SyncBidirectional
+	}
+}
+
+// CanSend returns true if this device should send files to peers
+func (c *Config) CanSend() bool {
+	dir := c.GetSyncDirection()
+	return dir == SyncBidirectional || dir == SyncSendOnly
+}
+
+// CanReceive returns true if this device should receive files from peers
+func (c *Config) CanReceive() bool {
+	dir := c.GetSyncDirection()
+	return dir == SyncBidirectional || dir == SyncReceiveOnly
 }
 
 // AddFolder adds a new folder to sync

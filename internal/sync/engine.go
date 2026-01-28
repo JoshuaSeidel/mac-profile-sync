@@ -239,6 +239,12 @@ func (e *Engine) handleFileEvent(event FileEvent) {
 }
 
 func (e *Engine) handleFileChange(event FileEvent) {
+	// Check if we're allowed to send files
+	if !e.cfg.CanSend() {
+		log.Debug().Str("path", event.Path).Msg("Skipping send (receive_only mode)")
+		return
+	}
+
 	// Get file info
 	fi, err := fileutil.GetFileInfo(event.Path, event.FolderPath)
 	if err != nil {
@@ -299,6 +305,12 @@ func (e *Engine) handleFileChange(event FileEvent) {
 func (e *Engine) handleFileDelete(event FileEvent) {
 	// Update state
 	e.state.RemoveFileState(event.FolderPath, event.RelPath)
+
+	// Check if we're allowed to send
+	if !e.cfg.CanSend() {
+		log.Debug().Str("path", event.Path).Msg("Skipping delete broadcast (receive_only mode)")
+		return
+	}
 
 	// Notify peers
 	msg := network.FileDeleteMessage{
@@ -446,6 +458,12 @@ func (e *Engine) handleFileList(fileList network.FileListMessage, peerName strin
 		Int("files", len(fileList.Files)).
 		Msg("Received file list")
 
+	// If we can't receive, don't request any files
+	if !e.cfg.CanReceive() {
+		log.Debug().Msg("Ignoring file list (send_only mode)")
+		return
+	}
+
 	// Check each file against our state
 	for _, remoteFile := range fileList.Files {
 		localPath := filepath.Join(fileList.FolderPath, remoteFile.RelPath)
@@ -539,6 +557,12 @@ func (e *Engine) handleFileRequest(req network.FileRequestMessage, send func(*ne
 }
 
 func (e *Engine) handleFileData(fileData network.FileDataMessage, peerName string) {
+	// Check if we're allowed to receive files
+	if !e.cfg.CanReceive() {
+		log.Debug().Str("file", fileData.RelPath).Msg("Ignoring incoming file (send_only mode)")
+		return
+	}
+
 	fullPath := filepath.Join(fileData.FolderPath, fileData.RelPath)
 
 	// Ensure directory exists
@@ -587,6 +611,12 @@ func (e *Engine) handleFileData(fileData network.FileDataMessage, peerName strin
 }
 
 func (e *Engine) handleRemoteDelete(del network.FileDeleteMessage, peerName string) {
+	// Check if we're allowed to receive (and thus process deletions)
+	if !e.cfg.CanReceive() {
+		log.Debug().Str("file", del.RelPath).Msg("Ignoring remote delete (send_only mode)")
+		return
+	}
+
 	fullPath := filepath.Join(del.FolderPath, del.RelPath)
 
 	// Delete local file

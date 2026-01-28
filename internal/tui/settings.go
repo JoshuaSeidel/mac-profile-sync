@@ -183,9 +183,9 @@ func (m *SettingsModel) renderSettingsList() string {
 		settings []int
 	}{
 		{"Device", []int{0}},
-		{"Sync", []int{1}},
-		{"Network", []int{2, 3}},
-		{"Security", []int{4, 5}},
+		{"Sync", []int{1, 2}},
+		{"Network", []int{3, 4}},
+		{"Security", []int{5, 6}},
 	}
 
 	for _, cat := range categories {
@@ -244,6 +244,21 @@ func (m *SettingsModel) renderHelpBar() string {
 }
 
 func (m *SettingsModel) refreshSettings() {
+	// Sync direction options
+	directionOptions := []string{"bidirectional", "send_only", "receive_only"}
+	directionIndex := 0
+	direction := m.cfg.Sync.Direction
+	if direction == "" {
+		direction = "bidirectional"
+	}
+	for i, opt := range directionOptions {
+		if opt == direction {
+			directionIndex = i
+			break
+		}
+	}
+
+	// Conflict resolution options
 	conflictOptions := []string{"newest_wins", "keep_both", "prompt"}
 	conflictIndex := 0
 	for i, opt := range conflictOptions {
@@ -259,6 +274,14 @@ func (m *SettingsModel) refreshSettings() {
 			label:    "Device Name",
 			value:    m.cfg.Device.Name,
 			editable: true,
+		},
+		{
+			key:         "sync.direction",
+			label:       "Sync Direction",
+			value:       direction,
+			editable:    true,
+			options:     directionOptions,
+			optionIndex: directionIndex,
 		},
 		{
 			key:         "sync.conflict_resolution",
@@ -313,6 +336,8 @@ func (m *SettingsModel) applySettingChange(key, value string) {
 	switch key {
 	case "device.name":
 		m.cfg.Device.Name = value
+	case "sync.direction":
+		m.cfg.Sync.Direction = value
 	case "sync.conflict_resolution":
 		m.cfg.Sync.ConflictResolution = value
 	case "network.port":
