@@ -152,44 +152,69 @@ func (d *Discovery) registerService() error {
 }
 
 func (d *Discovery) browse() {
-	resolver, err := zeroconf.NewResolver(nil)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to create mDNS resolver")
-		return
-	}
-
-	entries := make(chan *zeroconf.ServiceEntry)
-
-	go func() {
-		for {
-			select {
-			case entry := <-entries:
-				if entry == nil {
-					continue
-				}
-				// Don't add ourselves
-				if entry.Instance == d.deviceName {
-					continue
-				}
-				d.handleServiceEntry(entry)
-			case <-d.ctx.Done():
-				return
-			}
-		}
-	}()
-
-	// Browse continuously
+	// Browse continuously with a new resolver and channel each time
 	for {
 		select {
 		case <-d.ctx.Done():
 			return
 		default:
-			ctx, cancel := context.WithTimeout(d.ctx, 5*time.Second)
-			err := resolver.Browse(ctx, serviceType, serviceDomain, entries)
-			cancel()
-			if err != nil {
-				log.Error().Err(err).Msg("mDNS browse failed")
+		}
+
+		// Create a new resolver for each browse cycle
+		resolver, err := zeroconf.NewResolver(nil)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to create mDNS resolver")
+			time.Sleep(10 * time.Second)
+			continue
+		}
+
+		// Create a new channel for each browse (zeroconf closes the channel when done)
+		entries := make(chan *zeroconf.ServiceEntry)
+
+		// Create a context with timeout for this browse cycle
+		browseCtx, browseCancel := context.WithTimeout(d.ctx, 5*time.Second)
+
+		// Start Browse in background
+		go func() {
+			err := resolver.Browse(browseCtx, serviceType, serviceDomain, entries)
+			if err != nil && d.ctx.Err() == nil {
+				log.Debug().Err(err).Msg("mDNS browse cycle completed")
 			}
+		}()
+
+		// Process entries until channel is closed or context done
+		func() {
+			for {
+				select {
+				case entry, ok := <-entries:
+					if !ok {
+						// Channel closed by zeroconf
+						return
+					}
+					if entry == nil {
+						continue
+					}
+					// Don't add ourselves
+					if entry.Instance == d.deviceName {
+						continue
+					}
+					d.handleServiceEntry(entry)
+				case <-browseCtx.Done():
+					return
+				case <-d.ctx.Done():
+					browseCancel()
+					return
+				}
+			}
+		}()
+
+		browseCancel()
+
+		// Check if we should stop
+		select {
+		case <-d.ctx.Done():
+			return
+		default:
 			time.Sleep(10 * time.Second)
 		}
 	}
