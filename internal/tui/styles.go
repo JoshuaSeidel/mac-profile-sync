@@ -12,17 +12,12 @@ var (
 	errorColor     = lipgloss.Color("#EF4444") // Red
 	mutedColorVal  = lipgloss.Color("#6B7280") // Gray
 	textColor      = lipgloss.Color("#F9FAFB") // White
-	bgColor        = lipgloss.Color("#1F2937") // Dark gray
 )
 
 // Styles
 var (
 	// Muted style for text
 	mutedStyle = lipgloss.NewStyle().Foreground(mutedColorVal)
-
-	// Base styles
-	baseStyle = lipgloss.NewStyle().
-			Foreground(textColor)
 
 	// Title styles
 	titleStyle = lipgloss.NewStyle().
@@ -53,10 +48,6 @@ var (
 	disconnectedStyle = lipgloss.NewStyle().
 				Foreground(errorColor).
 				Bold(true)
-
-	syncingStyle = lipgloss.NewStyle().
-			Foreground(warningColor).
-			Bold(true)
 
 	// List item styles
 	selectedItemStyle = lipgloss.NewStyle().
@@ -97,19 +88,6 @@ var (
 	inactiveTabStyle = lipgloss.NewStyle().
 				Foreground(mutedColorVal).
 				Padding(0, 2)
-
-	// Button styles
-	buttonStyle = lipgloss.NewStyle().
-			Foreground(textColor).
-			Background(primaryColor).
-			Padding(0, 2).
-			MarginRight(1)
-
-	buttonInactiveStyle = lipgloss.NewStyle().
-				Foreground(mutedColorVal).
-				Background(bgColor).
-				Padding(0, 2).
-				MarginRight(1)
 
 	// Input styles
 	inputStyle = lipgloss.NewStyle().

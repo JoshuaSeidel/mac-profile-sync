@@ -342,7 +342,7 @@ func (m *SettingsModel) applySettingChange(key, value string) {
 		m.cfg.Sync.ConflictResolution = value
 	case "network.port":
 		var port int
-		fmt.Sscanf(value, "%d", &port)
+		_, _ = fmt.Sscanf(value, "%d", &port)
 		if port > 0 && port < 65536 {
 			m.cfg.Network.Port = port
 		}

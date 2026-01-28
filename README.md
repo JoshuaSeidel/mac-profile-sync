@@ -1,13 +1,15 @@
 # Mac Profile Sync
 
-A Go-based TUI application that keeps folders (Desktop, Documents, etc.) synchronized between two Macs in real-time using filesystem watching, with Bonjour auto-discovery and configurable conflict resolution.
+A Go-based application that keeps folders (Desktop, Documents, etc.) synchronized between two Macs in real-time using filesystem watching, with Bonjour auto-discovery and configurable conflict resolution.
 
 ## Features
 
 - **Real-time sync** - Uses filesystem watching to detect and sync changes instantly
 - **Bonjour/mDNS discovery** - Automatically discovers other Macs on the network
-- **Beautiful TUI** - Interactive terminal interface for managing sync
+- **Interactive TUI** - Terminal interface for configuration and control
 - **Conflict resolution** - Choose between newest-wins, keep-both, or manual resolution
+- **Sync direction** - Bidirectional, send-only, or receive-only modes
+- **Exclude directories** - Prevent specific directories from syncing
 - **Secure** - TLS encryption for file transfers
 - **Configurable** - YAML-based configuration with sensible defaults
 
@@ -22,7 +24,7 @@ curl -fsSL https://raw.githubusercontent.com/JoshuaSeidel/mac-profile-sync/main/
 ### Install Specific Version
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/JoshuaSeidel/mac-profile-sync/main/install.sh | bash -s -- v1.0.0
+curl -fsSL https://raw.githubusercontent.com/JoshuaSeidel/mac-profile-sync/main/install.sh | bash -s -- v1.2.0
 ```
 
 ### Build from Source
@@ -33,19 +35,49 @@ cd mac-profile-sync
 make build
 ```
 
+## Quick Start
+
+1. **Configure using the TUI:**
+   ```bash
+   mac-profile-sync tui
+   ```
+
+2. **In the TUI:**
+   - Press `2` to go to Folders view
+   - Press `a` to add folders to sync
+   - Press `e` to exclude directories
+   - Press `1` to go to Dashboard
+   - Press `s` to start sync
+
+3. **Run the daemon:**
+   ```bash
+   mac-profile-sync
+   ```
+
+4. **Repeat on your other Mac** - they will auto-discover each other via Bonjour.
+
 ## Usage
 
-### Start the TUI Application
+### Run Daemon (Default)
 
 ```bash
 mac-profile-sync
 ```
 
-### Run as Background Daemon
+Runs the sync daemon. **Note:** Sync must be enabled first using the TUI. If sync is disabled, the daemon will exit immediately.
+
+### Launch TUI for Configuration
 
 ```bash
-mac-profile-sync daemon
+mac-profile-sync tui
 ```
+
+Opens the interactive TUI for:
+- Adding/removing sync folders
+- Excluding directories
+- Managing peers
+- Changing settings
+- Starting/stopping sync
 
 ### Other Commands
 
@@ -68,42 +100,39 @@ mac-profile-sync version
 
 ## TUI Interface
 
-```
-╭─────────────────── Mac Profile Sync ────────────────────╮
-│                                                         │
-│  Status: ● Connected                                    │
-│  Peer: MacBook-Air (192.168.1.105)                     │
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │ Synced Folders                           [a]dd  │   │
-│  ├─────────────────────────────────────────────────┤   │
-│  │ ✓ ~/Desktop                          12 files   │   │
-│  │ ✓ ~/Documents                        847 files  │   │
-│  │ ○ ~/Pictures                         disabled   │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                         │
-│  Recent Activity:                                       │
-│  → Synced report.docx                     2s ago       │
-│  → Synced screenshot.png                  5s ago       │
-│  ← Received budget.xlsx                   1m ago       │
-│                                                         │
-│  [d]ashboard [f]olders [s]ettings [q]uit              │
-╰─────────────────────────────────────────────────────────╯
-```
-
-### Keyboard Shortcuts
+### Navigation
 
 | Key | Action |
 |-----|--------|
-| `d` | Dashboard view |
-| `f` | Folder management |
-| `c` | Conflict resolution |
-| `s` | Settings |
+| `Tab` / `Shift+Tab` | Switch between views |
+| `1` | Dashboard view |
+| `2` | Folder management |
+| `3` | Peers view |
+| `4` | Settings |
 | `q` | Quit |
-| `↑/↓` | Navigate |
-| `Enter` | Select/Toggle |
-| `a` | Add folder |
-| `x` | Remove folder |
+| `↑/↓` | Navigate within view |
+
+### Dashboard View
+
+| Key | Action |
+|-----|--------|
+| `s` | Start/stop sync |
+
+### Folders View
+
+| Key | Action |
+|-----|--------|
+| `a` | Add sync folder |
+| `e` | Exclude directory |
+| `Enter/Space` | Toggle folder sync |
+| `x` | Remove folder/exclusion |
+
+### Peers View
+
+| Key | Action |
+|-----|--------|
+| `a` | Add manual peer |
+| `x` | Remove peer |
 
 ## Configuration
 
@@ -120,29 +149,39 @@ folders:
     enabled: true
   - path: ~/Documents
     enabled: true
-  - path: ~/Pictures
-    enabled: false
 
 # Sync settings
 sync:
-  conflict_resolution: "newest_wins"  # newest_wins | keep_both | prompt
+  enabled: false                          # Must be enabled via TUI
+  direction: "bidirectional"              # bidirectional | send_only | receive_only
+  conflict_resolution: "newest_wins"      # newest_wins | keep_both | prompt
   ignore_patterns:
     - ".DS_Store"
     - "*.tmp"
     - ".git"
     - "node_modules"
+    - ".Trash"
+  exclude_dirs: []                        # e.g., ["~/Documents/Private"]
 
 # Network settings
 network:
   port: 9876
   use_discovery: true
-  manual_peers: []  # e.g., ["192.168.1.100:9876"]
+  manual_peers: []                        # e.g., ["192.168.1.100:9876"]
 
 # Security
 security:
   require_pairing: true
   encryption: true
 ```
+
+### Sync Direction Modes
+
+| Mode | Description |
+|------|-------------|
+| `bidirectional` | Sync files both ways (default) |
+| `send_only` | Only send files to peers, never receive |
+| `receive_only` | Only receive files from peers, never send |
 
 ### Conflict Resolution Strategies
 
@@ -168,7 +207,6 @@ cat > ~/Library/LaunchAgents/com.github.joshuaseidel.mac-profile-sync.plist << E
     <key>ProgramArguments</key>
     <array>
         <string>/usr/local/bin/mac-profile-sync</string>
-        <string>daemon</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
@@ -185,6 +223,8 @@ launchctl load ~/Library/LaunchAgents/com.github.joshuaseidel.mac-profile-sync.p
 launchctl unload ~/Library/LaunchAgents/com.github.joshuaseidel.mac-profile-sync.plist
 ```
 
+**Note:** Remember to enable sync using `mac-profile-sync tui` before setting up auto-start.
+
 ## Network Requirements
 
 - Both Macs must be on the same local network
@@ -193,22 +233,23 @@ launchctl unload ~/Library/LaunchAgents/com.github.joshuaseidel.mac-profile-sync
 
 ## Troubleshooting
 
+### Sync Not Starting
+
+1. Ensure sync is enabled: Run `mac-profile-sync tui`, press `s` on Dashboard
+2. Check that at least one folder is configured and enabled
+
 ### Peers Not Discovering
 
 1. Ensure both Macs are on the same network
 2. Check firewall settings allow port 9876
-3. Try using manual peers in config:
-   ```yaml
-   network:
-     manual_peers:
-       - "192.168.1.100:9876"
-   ```
+3. Try using manual peers in TUI (press `3`, then `a`)
 
-### Sync Not Working
+### Files Not Syncing
 
 1. Check logs: `~/.mac-profile-sync/stderr.log`
 2. Run with verbose logging: `mac-profile-sync -v`
 3. Verify folders exist and are accessible
+4. Check if the path is in exclude_dirs
 
 ## Development
 

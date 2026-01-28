@@ -349,7 +349,7 @@ func (e *Engine) onClientConnect(conn *network.Connection) {
 		DeviceID:   e.cfg.Device.Name, // Use name as ID for now
 		Version:    network.ProtocolVersion,
 	}
-	conn.SendPayload(network.MsgHello, hello)
+	_ = conn.SendPayload(network.MsgHello, hello)
 }
 
 func (e *Engine) onClientDisconnect(conn *network.Connection) {
@@ -365,7 +365,7 @@ func (e *Engine) onServerConnect(conn *network.ClientConnection) {
 		DeviceID:   e.cfg.Device.Name,
 		Version:    network.ProtocolVersion,
 	}
-	conn.SendPayload(network.MsgHello, hello)
+	_ = conn.SendPayload(network.MsgHello, hello)
 }
 
 func (e *Engine) onServerDisconnect(conn *network.ClientConnection) {
@@ -401,12 +401,14 @@ func (e *Engine) handleMessage(msg *network.Message, peerName string, send func(
 			Accepted:   true,
 		}
 		ackMsg, _ := network.NewMessage(network.MsgHelloAck, ack)
-		send(ackMsg)
+		_ = send(ackMsg)
 
 		// Trigger sync of all folders
 		for _, folder := range e.cfg.Folders {
 			if folder.Enabled {
-				go e.SyncFolder(folder.Path)
+				go func(path string) {
+					_ = e.SyncFolder(path)
+				}(folder.Path)
 			}
 		}
 
@@ -477,7 +479,7 @@ func (e *Engine) handleFileList(fileList network.FileListMessage, peerName strin
 				RelPath:    remoteFile.RelPath,
 			}
 			reqMsg, _ := network.NewMessage(network.MsgFileRequest, req)
-			send(reqMsg)
+			_ = send(reqMsg)
 			continue
 		}
 
@@ -508,7 +510,7 @@ func (e *Engine) handleFileList(fileList network.FileListMessage, peerName strin
 						RelPath:    remoteFile.RelPath,
 					}
 					reqMsg, _ := network.NewMessage(network.MsgFileRequest, req)
-					send(reqMsg)
+					_ = send(reqMsg)
 				}
 			} else {
 				// No conflict, check which is newer
@@ -519,7 +521,7 @@ func (e *Engine) handleFileList(fileList network.FileListMessage, peerName strin
 						RelPath:    remoteFile.RelPath,
 					}
 					reqMsg, _ := network.NewMessage(network.MsgFileRequest, req)
-					send(reqMsg)
+					_ = send(reqMsg)
 				}
 			}
 		}
@@ -570,7 +572,7 @@ func (e *Engine) handleFileRequest(req network.FileRequestMessage, send func(*ne
 	}
 
 	dataMsg, _ := network.NewMessage(network.MsgFileData, msg)
-	send(dataMsg)
+	_ = send(dataMsg)
 }
 
 func (e *Engine) handleFileData(fileData network.FileDataMessage, peerName string) {

@@ -232,7 +232,7 @@ func (d *Discovery) doBrowseCycle() {
 			}
 			close(done)
 		}()
-		resolver.Browse(browseCtx, serviceType, serviceDomain, entries)
+		_ = resolver.Browse(browseCtx, serviceType, serviceDomain, entries)
 	}()
 
 	// Process entries until context done or browse completes
@@ -299,7 +299,7 @@ func (d *Discovery) addManualPeer(addr string) {
 	}
 
 	var port int
-	fmt.Sscanf(portStr, "%d", &port)
+	_, _ = fmt.Sscanf(portStr, "%d", &port)
 
 	peer := &Peer{
 		ID:       fmt.Sprintf("manual-%s", addr),

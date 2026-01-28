@@ -95,7 +95,7 @@ func (s *Server) Stop() {
 	s.cancel()
 
 	if s.listener != nil {
-		s.listener.Close()
+		_ = s.listener.Close()
 	}
 
 	// Close all connections
@@ -196,7 +196,7 @@ func (s *Server) handleConnection(netConn net.Conn) {
 // Close closes the connection
 func (c *Connection) Close() {
 	c.cancel()
-	c.Conn.Close()
+	_ = c.Conn.Close()
 }
 
 // Send sends a message to the peer
@@ -204,7 +204,7 @@ func (c *Connection) Send(msg *Message) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.Conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
+	_ = c.Conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
 	return WriteMessage(c.Conn, msg)
 }
 
@@ -225,7 +225,7 @@ func (c *Connection) readLoop() {
 		default:
 		}
 
-		c.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		_ = c.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 		msg, err := ReadMessage(c.Conn)
 		if err != nil {
 			select {
@@ -240,7 +240,7 @@ func (c *Connection) readLoop() {
 
 		// Handle ping/pong internally
 		if msg.Type == MsgPing {
-			c.SendPayload(MsgPong, nil)
+			_ = c.SendPayload(MsgPong, nil)
 			continue
 		}
 

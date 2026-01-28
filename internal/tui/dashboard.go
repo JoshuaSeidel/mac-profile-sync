@@ -83,7 +83,7 @@ func (m *DashboardModel) Update(msg tea.Msg) (*DashboardModel, tea.Cmd) {
 			newState := !m.syncRunning
 			m.syncRunning = newState
 			m.cfg.Sync.Enabled = newState
-			config.Save(m.cfg)
+			_ = config.Save(m.cfg)
 			return m, func() tea.Msg {
 				return SyncToggleMsg{Enabled: newState}
 			}

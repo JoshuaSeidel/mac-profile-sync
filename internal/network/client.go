@@ -166,7 +166,7 @@ func (c *Client) GetConnection(address string) *ClientConnection {
 // Close closes the connection
 func (cc *ClientConnection) Close() {
 	cc.cancel()
-	cc.Conn.Close()
+	_ = cc.Conn.Close()
 
 	if cc.Client.onDisconnect != nil {
 		cc.Client.onDisconnect(cc)
@@ -180,7 +180,7 @@ func (cc *ClientConnection) Send(msg *Message) error {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
 
-	cc.Conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
+	_ = cc.Conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
 	return WriteMessage(cc.Conn, msg)
 }
 
@@ -211,7 +211,7 @@ func (cc *ClientConnection) readLoop() {
 		default:
 		}
 
-		cc.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		_ = cc.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 		msg, err := ReadMessage(cc.Conn)
 		if err != nil {
 			select {
@@ -226,7 +226,7 @@ func (cc *ClientConnection) readLoop() {
 
 		// Handle ping/pong internally
 		if msg.Type == MsgPing {
-			cc.SendPayload(MsgPong, nil)
+			_ = cc.SendPayload(MsgPong, nil)
 			continue
 		}
 

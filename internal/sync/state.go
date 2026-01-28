@@ -207,7 +207,7 @@ func (s *StateStore) ClearFolder(folderPath string) {
 	// Also remove the state file
 	filename := fmt.Sprintf("%x.json", hashString(folderPath))
 	path := filepath.Join(s.stateDir, filename)
-	os.Remove(path)
+	_ = os.Remove(path)
 }
 
 // hashString creates a simple hash of a string for filenames

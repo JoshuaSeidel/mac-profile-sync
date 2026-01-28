@@ -102,7 +102,7 @@ func (w *Watcher) Start() error {
 // Stop stops the watcher
 func (w *Watcher) Stop() {
 	close(w.done)
-	w.watcher.Close()
+	_ = w.watcher.Close()
 }
 
 // AddFolder adds a folder to watch (recursively)
@@ -159,12 +159,12 @@ func (w *Watcher) RemoveFolder(path string) error {
 	}
 
 	// Remove all watches under this path
-	filepath.Walk(path, func(walkPath string, info os.FileInfo, err error) error {
+	_ = filepath.Walk(path, func(walkPath string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
 		if info.IsDir() {
-			w.watcher.Remove(walkPath)
+			_ = w.watcher.Remove(walkPath)
 		}
 		return nil
 	})
@@ -214,7 +214,7 @@ func (w *Watcher) handleFsEvent(event fsnotify.Event) {
 		eventType = EventCreate
 		// If a new directory is created, add it to the watch
 		if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
-			w.watcher.Add(event.Name)
+			_ = w.watcher.Add(event.Name)
 		}
 	case event.Op&fsnotify.Write == fsnotify.Write:
 		eventType = EventModify

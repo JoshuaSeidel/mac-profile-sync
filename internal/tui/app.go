@@ -155,7 +155,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Start or stop sync engine
 		if msg.Enabled {
 			if a.engine != nil {
-				a.engine.Start()
+				_ = a.engine.Start()
 			}
 		} else {
 			if a.engine != nil {
