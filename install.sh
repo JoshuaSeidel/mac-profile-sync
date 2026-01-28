@@ -228,20 +228,47 @@ EOF
     fi
 }
 
-# Print usage
-print_usage() {
+# Print next steps
+print_next_steps() {
     echo ""
-    success "Installation complete!"
+    echo "╔═══════════════════════════════════════════════════════════════╗"
+    echo "║                   Installation Complete!                       ║"
+    echo "╚═══════════════════════════════════════════════════════════════╝"
     echo ""
-    echo "Usage:"
-    echo "  $BINARY_NAME              # Start TUI application"
-    echo "  $BINARY_NAME daemon       # Run as background daemon"
-    echo "  $BINARY_NAME status       # Show sync status"
-    echo "  $BINARY_NAME add ~/path   # Add folder to sync"
-    echo "  $BINARY_NAME peers        # List discovered peers"
-    echo "  $BINARY_NAME version      # Show version"
+    echo -e "${GREEN}Next Steps:${NC}"
     echo ""
-    echo "Configuration: ~/.mac-profile-sync/config.yaml"
+    echo -e "${YELLOW}1. Configure your sync settings:${NC}"
+    echo "   Edit ~/.mac-profile-sync/config.yaml to customize:"
+    echo "   - Device name (how this Mac appears to peers)"
+    echo "   - Folders to sync (Desktop, Documents, etc.)"
+    echo "   - Conflict resolution strategy"
+    echo "   - Network port and discovery settings"
+    echo ""
+    echo -e "${YELLOW}2. Start syncing:${NC}"
+    echo "   Option A - Interactive TUI:"
+    echo "     ${BLUE}mac-profile-sync${NC}"
+    echo ""
+    echo "   Option B - Background daemon:"
+    echo "     ${BLUE}mac-profile-sync daemon${NC}"
+    echo ""
+    echo -e "${YELLOW}3. On your other Mac:${NC}"
+    echo "   Run the same installer and start the app."
+    echo "   Both Macs will auto-discover each other via Bonjour."
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo -e "${GREEN}Quick Reference:${NC}"
+    echo "  mac-profile-sync              Launch interactive TUI"
+    echo "  mac-profile-sync daemon       Run as background service"
+    echo "  mac-profile-sync status       Show current sync status"
+    echo "  mac-profile-sync add ~/path   Add a folder to sync"
+    echo "  mac-profile-sync remove ~/path Remove a folder"
+    echo "  mac-profile-sync peers        List discovered peers"
+    echo ""
+    echo -e "${GREEN}Configuration:${NC} ~/.mac-profile-sync/config.yaml"
+    echo -e "${GREEN}Logs:${NC}          ~/.mac-profile-sync/stderr.log"
+    echo ""
+    echo "For more help: mac-profile-sync --help"
     echo ""
 }
 
@@ -258,7 +285,7 @@ main() {
     install
     setup_config
     setup_launchd
-    print_usage
+    print_next_steps
 }
 
 main
