@@ -152,7 +152,8 @@ You can sync your entire home directory by adding `~` or your home path:
 ```
 
 When syncing home directories, the following are **ignored by default** to prevent issues:
-- `Library` - macOS system files
+- `Library` - macOS system/application data
+- `Applications` - Application bundles
 - `.Trash` - Trash folder
 - `.cache`, `.local`, `.config` - Application caches
 - `Caches`, `CachedData`, `Cache` - Various cache folders

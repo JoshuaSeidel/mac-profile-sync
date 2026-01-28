@@ -172,6 +172,7 @@ func setDefaults() {
 		".TemporaryItems",
 		// macOS system folders
 		"Library",
+		"Applications",
 		".Trash",
 		".cache",
 		".local",
